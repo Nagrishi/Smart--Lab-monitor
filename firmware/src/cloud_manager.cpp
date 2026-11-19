@@ -12,14 +12,20 @@
 // FLASK BACKEND CONFIGURATION
 // ==========================================
 
+// LOCAL DEVELOPMENT:
+// Keep this URL while testing on the same Wi-Fi.
+//
+// PRODUCTION:
+// Replace it with your deployed Render HTTPS URL.
+
 const char* SERVER_URL =
     "http://10.231.23.184:5000/api/sensor";
 
-// Upload interval: 5 seconds
+// Upload every 5 seconds
 const unsigned long UPLOAD_INTERVAL = 5000;
 
-// HTTP timeout: 2 seconds
-const unsigned long HTTP_TIMEOUT = 2000;
+// HTTP timeout
+const unsigned long HTTP_TIMEOUT = 5000;
 
 unsigned long lastUploadTime = 0;
 
@@ -48,39 +54,27 @@ void cloudManagerUpdate(const SensorData &data) {
 
     unsigned long now = millis();
 
-    // --------------------------------------
-    // CHECK UPLOAD INTERVAL
-    // --------------------------------------
-
+    // Check upload interval
     if (now - lastUploadTime < UPLOAD_INTERVAL) {
         return;
     }
 
-    // --------------------------------------
-    // CHECK WIFI CONNECTION
-    // --------------------------------------
-
+    // Check Wi-Fi connection
     if (!wifiManagerIsConnected()) {
         return;
     }
 
-    // --------------------------------------
-    // CHECK DHT11 VALIDITY
-    // Backend requires temperature and humidity
-    // --------------------------------------
-
+    // Backend requires valid temperature and humidity
     if (!data.dhtValid) {
 
         Serial.println(
-            "Cloud upload skipped: DHT11 data invalid"
+            "Cloud upload skipped: Invalid DHT11 data"
         );
 
         return;
     }
 
-    // Update upload timer
     lastUploadTime = now;
-
 
     // ======================================
     // HTTP INITIALIZATION
@@ -105,6 +99,10 @@ void cloudManagerUpdate(const SensorData &data) {
         "application/json"
     );
 
+    http.addHeader(
+        "Accept",
+        "application/json"
+    );
 
     // ======================================
     // BUILD JSON PAYLOAD
@@ -116,22 +114,14 @@ void cloudManagerUpdate(const SensorData &data) {
 
     payload = "{";
 
-
-    // --------------------------------------
-    // DHT11 DATA
-    // --------------------------------------
-
+    // DHT11
     payload += "\"temperature\":";
     payload += String(data.temperature, 2);
 
     payload += ",\"humidity\":";
     payload += String(data.humidity, 2);
 
-
-    // --------------------------------------
-    // PZEM-004T DATA
-    // --------------------------------------
-
+    // PZEM-004T
     if (data.pzemValid) {
 
         payload += ",\"voltage\":";
@@ -153,11 +143,7 @@ void cloudManagerUpdate(const SensorData &data) {
         payload += String(data.powerFactor, 2);
     }
 
-
-    // --------------------------------------
-    // MMWAVE PRESENCE DATA
-    // --------------------------------------
-
+    // MMWAVE
     if (data.presenceValid) {
 
         payload += ",\"mmwave_person_detected\":";
@@ -167,11 +153,7 @@ void cloudManagerUpdate(const SensorData &data) {
             : "false";
     }
 
-
-    // --------------------------------------
-    // TEMPERATURE WARNING
-    // --------------------------------------
-
+    // Temperature warning
     bool temperatureWarning =
         buzzerManagerTemperatureWarning();
 
@@ -181,11 +163,7 @@ void cloudManagerUpdate(const SensorData &data) {
         ? "true"
         : "false";
 
-
-    // --------------------------------------
-    // BUZZER STATUS
-    // --------------------------------------
-
+    // Buzzer
     bool buzzerOn =
         buzzerManagerIsActive();
 
@@ -195,54 +173,48 @@ void cloudManagerUpdate(const SensorData &data) {
         ? "true"
         : "false";
 
-
-    // Finish JSON
     payload += "}";
 
-
     // ======================================
-    // SEND HTTP POST REQUEST
+    // SEND HTTP POST
     // ======================================
 
     Serial.println();
-    Serial.println("===== CLOUD JSON PAYLOAD =====");
+    Serial.println("===== CLOUD UPLOAD =====");
 
     Serial.println(payload);
 
-    Serial.println("==============================");
-
-    Serial.println("Uploading sensor data...");
+    Serial.println("========================");
 
     int httpCode = http.POST(payload);
-
 
     // ======================================
     // HANDLE SERVER RESPONSE
     // ======================================
 
-    if (httpCode == HTTP_CODE_CREATED) {
+    if (httpCode >= 200 && httpCode < 300) {
 
-        Serial.println(
-            "Cloud upload successful!"
+        Serial.printf(
+            "Cloud upload successful! HTTP: %d\n",
+            httpCode
         );
 
-        Serial.println(
-            "Database record created."
-        );
+        String response = http.getString();
 
+        Serial.print("Server response: ");
+        Serial.println(response);
     }
 
     else if (httpCode > 0) {
 
         Serial.printf(
-            "Cloud upload failed. HTTP code: %d\n",
+            "Cloud upload failed. HTTP: %d\n",
             httpCode
         );
 
         Serial.println(
             http.getString()
         );
-
     }
 
     else {
@@ -253,7 +225,6 @@ void cloudManagerUpdate(const SensorData &data) {
         );
     }
 
-
-    // Release HTTP resources
+    // Release resources
     http.end();
 }
