@@ -8,7 +8,9 @@ from contextlib import closing
 from dotenv import load_dotenv
 import psycopg
 from psycopg.rows import dict_row
+
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 
 
 # ==================================================
@@ -19,6 +21,34 @@ app = Flask(__name__)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Allow local React development and configured frontend origins.
+# On Render, set FRONTEND_ORIGINS to your deployed frontend URL.
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+extra_origins = os.getenv("FRONTEND_ORIGINS", "")
+
+if extra_origins:
+    ALLOWED_ORIGINS.extend(
+        origin.strip().rstrip("/")
+        for origin in extra_origins.split(",")
+        if origin.strip()
+    )
+
+CORS(
+    app,
+    resources={
+        r"/api/*": {
+            "origins": ALLOWED_ORIGINS,
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+            "max_age": 600,
+        }
+    },
+)
 
 
 # ==================================================
@@ -40,9 +70,7 @@ DB_PATH = os.path.join(
 )
 
 # Load backend/.env for local development.
-# Environment variables supplied by hosting platforms
-# take precedence over values in .env.
-
+# Render environment variables take precedence.
 load_dotenv(
     dotenv_path=os.path.join(BACKEND_DIR, ".env"),
     override=False
@@ -50,10 +78,7 @@ load_dotenv(
 
 # DATABASE_URL present = PostgreSQL
 # DATABASE_URL absent = SQLite
-
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", ""
-).strip()
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 USE_POSTGRES = bool(DATABASE_URL)
 
@@ -146,20 +171,18 @@ def initialize_database():
                 """)
 
                 # Add missing PostgreSQL columns.
-
                 for column, column_type in SENSOR_COLUMNS.items():
 
                     execute_sql(
                         conn,
                         f"""
-                        ALTER TABLE sensor_data
-                        ADD COLUMN IF NOT EXISTS
-                        {column} {column_type}
+                            ALTER TABLE sensor_data
+                            ADD COLUMN IF NOT EXISTS
+                            {column} {column_type}
                         """
                     )
 
                 # Index for faster timestamp queries.
-
                 execute_sql(conn, """
                     CREATE INDEX IF NOT EXISTS
                     idx_sensor_data_timestamp
@@ -178,7 +201,6 @@ def initialize_database():
                 """)
 
                 # Read existing SQLite columns.
-
                 existing_columns = {
                     row["name"]
                     for row in execute_sql(
@@ -188,7 +210,6 @@ def initialize_database():
                 }
 
                 # Add only missing columns.
-
                 for column, column_type in SENSOR_COLUMNS.items():
 
                     if column not in existing_columns:
@@ -196,8 +217,8 @@ def initialize_database():
                         execute_sql(
                             conn,
                             f"""
-                            ALTER TABLE sensor_data
-                            ADD COLUMN {column} {column_type}
+                                ALTER TABLE sensor_data
+                                ADD COLUMN {column} {column_type}
                             """
                         )
 
@@ -258,14 +279,10 @@ def to_integer(value):
 
         value = value.strip().lower()
 
-        if value in (
-            "true", "high", "yes", "on"
-        ):
+        if value in ("true", "high", "yes", "on"):
             return 1
 
-        if value in (
-            "false", "low", "no", "off"
-        ):
+        if value in ("false", "low", "no", "off"):
             return 0
 
     try:
@@ -361,7 +378,6 @@ def receive_sensor_data():
         }), 400
 
     # Support flat and nested JSON payloads.
-
     pzem = data.get("pzem") or {}
     dht11 = data.get("dht11") or {}
     mq2 = data.get("mq2") or {}
@@ -558,7 +574,6 @@ def receive_sensor_data():
         )
 
         if USE_POSTGRES:
-
             insert_sql += " RETURNING id"
 
         cursor = execute_sql(
@@ -568,11 +583,8 @@ def receive_sensor_data():
         )
 
         if USE_POSTGRES:
-
             record_id = cursor.fetchone()["id"]
-
         else:
-
             record_id = cursor.lastrowid
 
         conn.commit()
@@ -633,10 +645,10 @@ def get_sensor_data():
         rows = execute_sql(
             conn,
             """
-            SELECT *
-            FROM sensor_data
-            ORDER BY id DESC
-            LIMIT 1000
+                SELECT *
+                FROM sensor_data
+                ORDER BY id DESC
+                LIMIT 1000
             """
         ).fetchall()
 
@@ -678,10 +690,10 @@ def get_latest_sensor_data():
         row = execute_sql(
             conn,
             """
-            SELECT *
-            FROM sensor_data
-            ORDER BY id DESC
-            LIMIT 1
+                SELECT *
+                FROM sensor_data
+                ORDER BY id DESC
+                LIMIT 1
             """
         ).fetchone()
 
@@ -739,13 +751,13 @@ if __name__ == "__main__":
         "PostgreSQL" if USE_POSTGRES else DB_PATH
     )
 
+    logger.info(
+        "Allowed frontend origins: %s",
+        ALLOWED_ORIGINS
+    )
+
     app.run(
-
         host="0.0.0.0",
-
-        port=int(
-            os.getenv("PORT", "5000")
-        ),
-
+        port=int(os.getenv("PORT", "5000")),
         debug=False
     )
