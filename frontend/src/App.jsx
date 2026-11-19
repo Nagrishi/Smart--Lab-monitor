@@ -1,5 +1,6 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+
 import {
   Activity,
   Thermometer,
@@ -37,9 +38,10 @@ import {
 import "./index.css";
 import "./smart-lab-animations.css";
 
-// ------------------------------------------
+
+// ==========================================
 // FORMAT HELPERS
-// ------------------------------------------
+// ==========================================
 
 function formatValue(value, decimals = 1) {
   if (value === null || value === undefined || value === "") {
@@ -48,15 +50,20 @@ function formatValue(value, decimals = 1) {
 
   const number = Number(value);
 
-  return Number.isFinite(number) ? number.toFixed(decimals) : "--";
+  return Number.isFinite(number)
+    ? number.toFixed(decimals)
+    : "--";
 }
+
 
 function formatTime(timestamp) {
   if (!timestamp) return "--";
 
-  const date = new Date(timestamp.replace(" ", "T") + "Z");
+  const date = new Date(timestamp);
 
-  if (Number.isNaN(date.getTime())) return timestamp;
+  if (Number.isNaN(date.getTime())) {
+    return String(timestamp);
+  }
 
   return date.toLocaleTimeString([], {
     hour: "2-digit",
@@ -65,17 +72,20 @@ function formatTime(timestamp) {
   });
 }
 
+
 function isActive(value) {
   return Number(value) === 1;
 }
+
 
 function isMissing(value) {
   return value === null || value === undefined || value === "";
 }
 
-// ------------------------------------------
+
+// ==========================================
 // REUSABLE SENSOR CARD
-// ------------------------------------------
+// ==========================================
 
 function SensorCard({
   title,
@@ -88,6 +98,7 @@ function SensorCard({
 }) {
   return (
     <div className={`sensor-card ${className}`.trim()}>
+
       <div className="card-heading">
         <span>{title}</span>
 
@@ -101,16 +112,23 @@ function SensorCard({
         <span>{unit}</span>
       </div>
 
-      <div className="card-subtitle">{subtitle}</div>
+      <div className="card-subtitle">
+        {subtitle}
+      </div>
+
     </div>
   );
 }
 
-// ------------------------------------------
-// ANIMATED CIRCUIT VISUAL
-// ------------------------------------------
 
-function CircuitVisual({ personDetected, personStatusUnknown }) {
+// ==========================================
+// ANIMATED CIRCUIT VISUAL
+// ==========================================
+
+function CircuitVisual({
+  personDetected,
+  personStatusUnknown,
+}) {
   const radarClass = personStatusUnknown
     ? "radar-unknown"
     : personDetected
@@ -120,24 +138,35 @@ function CircuitVisual({ personDetected, personStatusUnknown }) {
   return (
     <div
       className="circuit-visual"
-      aria-label="Abstract electronic circuit visualization"
+      aria-label="Electronic circuit visualization"
     >
+
       <div className="circuit-grid" />
 
       <svg
         className="circuit-svg"
         viewBox="0 0 520 230"
         role="img"
-        aria-label="Animated abstract circuit traces"
+        aria-label="Animated circuit traces"
       >
+
         <defs>
-          <linearGradient id="circuitLine" x1="0" y1="0" x2="1" y2="1">
+          <linearGradient
+            id="circuitLine"
+            x1="0"
+            y1="0"
+            x2="1"
+            y2="1"
+          >
             <stop offset="0%" stopColor="#22d3ee" />
             <stop offset="100%" stopColor="#14b8a6" />
           </linearGradient>
 
           <filter id="circuitGlow">
-            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feGaussianBlur
+              stdDeviation="3"
+              result="blur"
+            />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
@@ -164,7 +193,10 @@ function CircuitVisual({ personDetected, personStatusUnknown }) {
           <circle cx="430" cy="205" r="5" />
         </g>
 
-        <g className="circuit-core" filter="url(#circuitGlow)">
+        <g
+          className="circuit-core"
+          filter="url(#circuitGlow)"
+        >
           <circle cx="260" cy="115" r="49" />
           <circle cx="260" cy="115" r="35" />
           <circle cx="260" cy="115" r="22" />
@@ -174,6 +206,7 @@ function CircuitVisual({ personDetected, personStatusUnknown }) {
           <path d="M248 115 H272 M260 103 V127" />
           <circle cx="260" cy="115" r="7" />
         </g>
+
       </svg>
 
       <div className="visual-label">
@@ -196,21 +229,27 @@ function CircuitVisual({ personDetected, personStatusUnknown }) {
               : "No presence detected"
         }
       >
+
         <div className="radar-ring ring-one" />
         <div className="radar-ring ring-two" />
         <div className="radar-ring ring-three" />
         <div className="radar-sweep" />
         <div className="radar-center" />
 
-        {personDetected && <div className="radar-target" />}
+        {personDetected && (
+          <div className="radar-target" />
+        )}
+
       </div>
+
     </div>
   );
 }
 
-// ------------------------------------------
-// REUSABLE STATUS ROW
-// ------------------------------------------
+
+// ==========================================
+// STATUS ROW
+// ==========================================
 
 function StatusRow({
   title,
@@ -221,108 +260,164 @@ function StatusRow({
 }) {
   return (
     <div className="status-row">
+
       <span>{title}</span>
 
       {unknown ? (
-        <span className="status-pill neutral">Unknown</span>
+        <span className="status-pill neutral">
+          Unknown
+        </span>
       ) : (
-        <span className={`status-pill ${active ? "danger" : "normal"}`}>
+        <span
+          className={`status-pill ${
+            active ? "danger" : "normal"
+          }`}
+        >
           <span className="status-dot" />
           {active ? activeText : inactiveText}
         </span>
       )}
+
     </div>
   );
 }
 
-// ------------------------------------------
+
+// ==========================================
 // MAIN DASHBOARD
-// ------------------------------------------
+// ==========================================
 
 export default function App() {
+
   const [latest, setLatest] = useState(null);
+
   const [history, setHistory] = useState([]);
 
   const [backendOnline, setBackendOnline] = useState(false);
+
   const [loading, setLoading] = useState(true);
+
+  const [refreshing, setRefreshing] = useState(false);
+
   const [error, setError] = useState("");
+
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  // ----------------------------------------
-  // FETCH BACKEND DATA
-  // ----------------------------------------
 
-  useEffect(() => {
-    let mounted = true;
+  // ========================================
+  // FETCH CLOUD DATA
+  // ========================================
 
-    async function loadDashboard() {
-      try {
-        const [records, health] = await Promise.all([
-          getSensorHistory(),
-          getBackendHealth(),
-        ]);
+  const loadDashboard = useCallback(async (showLoading = false) => {
 
-        if (!mounted) return;
-
-        if (!Array.isArray(records)) {
-          throw new Error("Unexpected sensor history response");
-        }
-
-        setBackendOnline(health.status === "online");
-
-        // Flask returns newest record first.
-        const newest = records[0] || null;
-
-        setLatest(newest);
-
-        // Prepare chronological chart data.
-        const chartData = records
-          .slice(0, 30)
-          .reverse()
-          .map((record) => ({
-            time: formatTime(record.timestamp),
-
-            temperature: isMissing(record.temperature)
-              ? null
-              : Number(record.temperature),
-
-            power: isMissing(record.power)
-              ? null
-              : Number(record.power),
-
-            // MQ-2 historical data.
-            mq2_adc: isMissing(record.mq2_adc)
-              ? null
-              : Number(record.mq2_adc),
-          }));
-
-        setHistory(chartData);
-        setLastUpdated(new Date());
-        setError("");
-      } catch (err) {
-        if (!mounted) return;
-
-        setBackendOnline(false);
-        setError(err.message || "Unable to connect to backend");
-      } finally {
-        if (mounted) setLoading(false);
-      }
+    if (showLoading) {
+      setRefreshing(true);
     }
 
-    loadDashboard();
+    try {
 
-    // Refresh readings every 3 seconds.
-    const timer = setInterval(loadDashboard, 3000);
+      const [records, health] = await Promise.all([
+        getSensorHistory(),
+        getBackendHealth(),
+      ]);
+  
+      // DEBUGGING LOGS
+      console.log("Sensor records:", records);
+      console.log("Records is array:", Array.isArray(records));
+      console.log("Health response:", health);
+      console.log("Latest record:", records[0]);
 
-    return () => {
-      mounted = false;
-      clearInterval(timer);
-    };
+      if (!Array.isArray(records)) {
+        throw new Error("Invalid sensor history response");
+      }
+
+      setBackendOnline(true);
+      console.log("Backend health:", health);
+
+      // API returns newest record first.
+      const newest = records[0] || null;
+
+      setLatest(newest);
+
+      // Prepare chronological chart data.
+      const chartData = records
+        .slice(0, 30)
+        .reverse()
+        .map((record) => ({
+          time: formatTime(record.timestamp),
+
+          temperature: isMissing(record.temperature)
+            ? null
+            : Number(record.temperature),
+
+          humidity: isMissing(record.humidity)
+            ? null
+            : Number(record.humidity),
+
+          power: isMissing(record.power)
+            ? null
+            : Number(record.power),
+
+          mq2_adc: isMissing(record.mq2_adc)
+            ? null
+            : Number(record.mq2_adc),
+        }));
+
+      setHistory(chartData);
+
+      setLastUpdated(new Date());
+
+      setError("");
+
+    } catch (err) {
+  console.error("Dashboard API error:", err);
+
+  setError(
+    err.message || "Unable to load dashboard data"
+  );
+} finally {
+
+      setLoading(false);
+
+      setRefreshing(false);
+    }
+
   }, []);
 
-  // ----------------------------------------
+
+  // ========================================
+  // AUTOMATIC DATA REFRESH
+  // ========================================
+
+  useEffect(() => {
+
+    let mounted = true;
+
+    const refresh = async () => {
+
+      if (!mounted) return;
+
+      await loadDashboard();
+    };
+
+    refresh();
+
+    // Refresh sensor data every 5 seconds.
+    const timer = setInterval(refresh, 5000);
+
+    return () => {
+
+      mounted = false;
+
+      clearInterval(timer);
+    };
+
+  }, [loadDashboard]);
+
+
+  // ========================================
   // SENSOR STATUS CALCULATIONS
-  // ----------------------------------------
+  // ========================================
 
   const hasRecord = latest !== null;
 
@@ -330,7 +425,9 @@ export default function App() {
     latest?.temperature_warning
   );
 
-  const buzzerOn = isActive(latest?.buzzer_on);
+  const buzzerOn = isActive(
+    latest?.buzzer_on
+  );
 
   const personDetected = isActive(
     latest?.mmwave_person_detected
@@ -340,9 +437,10 @@ export default function App() {
     latest?.mmwave_person_detected
   );
 
-  // ----------------------------------------
+
+  // ========================================
   // MQ-2 STATUS
-  // ----------------------------------------
+  // ========================================
 
   const mq2Available =
     latest !== null &&
@@ -353,25 +451,40 @@ export default function App() {
     );
 
   const mq2Adc = latest?.mq2_adc;
+
   const mq2Voltage = latest?.mq2_voltage;
+
   const mq2Digital = latest?.mq2_digital;
 
-  const gasAlertUnknown = isMissing(latest?.gas_triggered);
+  const gasAlertUnknown = isMissing(
+    latest?.gas_triggered
+  );
 
-  const gasTriggered = isActive(latest?.gas_triggered);
+  const gasTriggered = isActive(
+    latest?.gas_triggered
+  );
 
-  const mq2DigitalUnknown = isMissing(mq2Digital);
+  const mq2DigitalUnknown = isMissing(
+    mq2Digital
+  );
 
-  // ----------------------------------------
+
+  // ========================================
   // DASHBOARD UI
-  // ----------------------------------------
+  // ========================================
 
   return (
+
     <div className="app-shell">
 
+      {/* ================================== */}
       {/* SIDEBAR */}
+      {/* ================================== */}
+
       <aside className="sidebar">
+
         <div className="brand">
+
           <div className="brand-icon">
             <Cpu size={25} />
           </div>
@@ -380,11 +493,15 @@ export default function App() {
             <h2>SMART LAB</h2>
             <span>MONITORING SYSTEM</span>
           </div>
+
         </div>
 
-        <div className="sidebar-section">MAIN MENU</div>
+        <div className="sidebar-section">
+          MAIN MENU
+        </div>
 
         <nav>
+
           <a className="nav-item active" href="#overview">
             <Activity size={19} />
             Overview
@@ -409,10 +526,13 @@ export default function App() {
             <ShieldCheck size={19} />
             Security
           </a>
+
         </nav>
 
         <div className="sidebar-footer">
+
           <div className="device-indicator">
+
             <span
               className={`status-dot ${
                 backendOnline ? "green" : "red"
@@ -420,28 +540,43 @@ export default function App() {
             />
 
             <span>
-              {backendOnline ? "Backend connected" : "Backend offline"}
+              {backendOnline
+                ? "Backend connected"
+                : "Backend offline"}
             </span>
+
           </div>
 
           <p>Smart Lab Monitor v1.0</p>
+
         </div>
+
       </aside>
 
+
+      {/* ================================== */}
       {/* MAIN CONTENT */}
+      {/* ================================== */}
+
       <main className="main-content">
 
         {/* HEADER */}
+
         <header className="topbar">
+
           <div className="topbar-heading">
-            <p className="eyebrow">IOT MONITORING PLATFORM</p>
+
+            <p className="eyebrow">
+              IOT MONITORING PLATFORM
+            </p>
 
             <h1>Dashboard Overview</h1>
 
             <p className="header-description">
-              Monitor your laboratory environment, gas levels and electrical
-              parameters.
+              Monitor your laboratory environment, gas levels
+              and electrical parameters.
             </p>
+
           </div>
 
           <CircuitVisual
@@ -451,44 +586,110 @@ export default function App() {
 
           <div
             className={`connection-badge ${
-              backendOnline ? "connected" : "disconnected"
+              backendOnline
+                ? "connected"
+                : "disconnected"
             }`}
           >
-            {backendOnline ? <Wifi size={17} /> : <WifiOff size={17} />}
 
-            {backendOnline ? "SYSTEM ONLINE" : "BACKEND OFFLINE"}
+            {backendOnline
+              ? <Wifi size={17} />
+              : <WifiOff size={17} />}
+
+            {backendOnline
+              ? "SYSTEM ONLINE"
+              : "BACKEND OFFLINE"}
+
           </div>
+
         </header>
 
+
+        {/* ================================== */}
+        {/* CONNECTION ERROR */}
+        {/* ================================== */}
+
         {error && (
+
           <div className="error-banner">
+
             <WifiOff size={18} />
-            {error}. Check that Flask is running on port 5000.
+
+            {error}. Check your Render backend connection.
+
           </div>
+
         )}
+
+
+        {/* ================================== */}
+        {/* LOADING STATUS */}
+        {/* ================================== */}
 
         {loading && (
+
           <div className="loading-message">
+
             <RefreshCw size={18} className="spin" />
-            Loading sensor readings...
+
+            Connecting to cloud database...
+
           </div>
+
         )}
 
-        {/* -------------------------------- */}
+
+        {/* ================================== */}
+        {/* MANUAL REFRESH */}
+        {/* ================================== */}
+
+        <div className="section-heading">
+
+          <div>
+            <h2>Live Sensor Dashboard</h2>
+            <p>Cloud sensor data from Render and Supabase</p>
+          </div>
+
+          <button
+            type="button"
+            className="refresh-button"
+            onClick={() => loadDashboard(true)}
+            disabled={refreshing}
+          >
+
+            <RefreshCw
+              size={16}
+              className={refreshing ? "spin" : ""}
+            />
+
+            {refreshing ? "Refreshing..." : "Refresh"}
+
+          </button>
+
+        </div>
+
+
+        {/* ================================== */}
         {/* ENVIRONMENTAL MONITORING */}
-        {/* -------------------------------- */}
+        {/* ================================== */}
 
         <section id="environment">
+
           <div className="section-heading">
+
             <div>
               <h2>Environmental Monitoring</h2>
               <p>Real-time readings from DHT11</p>
             </div>
 
-            <span className="section-label">DHT11</span>
+            <span className="section-label">
+              DHT11
+            </span>
+
           </div>
 
           <div className="sensor-grid">
+
             <SensorCard
               title="Temperature"
               value={formatValue(latest?.temperature)}
@@ -506,15 +707,20 @@ export default function App() {
               color="blue"
               subtitle="Relative humidity"
             />
+
           </div>
+
         </section>
 
-        {/* -------------------------------- */}
+
+        {/* ================================== */}
         {/* MQ-2 GAS MONITORING */}
-        {/* -------------------------------- */}
+        {/* ================================== */}
 
         <section id="gas">
+
           <div className="section-heading">
+
             <div>
               <h2>Gas & Smoke Monitoring</h2>
 
@@ -523,10 +729,14 @@ export default function App() {
               </p>
             </div>
 
-            <span className="section-label">MQ-2</span>
+            <span className="section-label">
+              MQ-2
+            </span>
+
           </div>
 
           <div className="sensor-grid">
+
             <SensorCard
               title="Gas Sensor ADC"
               value={formatValue(mq2Adc, 0)}
@@ -567,10 +777,14 @@ export default function App() {
               color="purple"
               subtitle="MQ-2 comparator output"
             />
+
           </div>
 
-          {/* MQ-2 HARDWARE STATUS */}
+
+          {/* GAS ALERT STATUS */}
+
           <div className="security-card gas-status-card">
+
             <div
               className={`security-icon ${
                 gasAlertUnknown
@@ -584,6 +798,7 @@ export default function App() {
             </div>
 
             <div>
+
               <p>Gas Detection Status</p>
 
               <h3>
@@ -601,6 +816,7 @@ export default function App() {
                     ? "Gas alert condition reported by firmware"
                     : "No gas alert reported by firmware"}
               </span>
+
             </div>
 
             <span
@@ -612,29 +828,41 @@ export default function App() {
                     : "normal"
               }`}
             >
+
               {gasAlertUnknown
                 ? "NO DATA"
                 : gasTriggered
                   ? "ALERT"
                   : "SAFE"}
+
             </span>
+
           </div>
 
           {!mq2Available && (
+
             <div className="loading-message">
+
               <Flame size={18} />
-              MQ-2 hardware integration is pending. Connect the sensor to
-              start receiving actual readings.
+
+              MQ-2 hardware integration is pending.
+              Connect the sensor to receive actual readings.
+
             </div>
+
           )}
+
         </section>
 
-        {/* -------------------------------- */}
+
+        {/* ================================== */}
         {/* ELECTRICAL MONITORING */}
-        {/* -------------------------------- */}
+        {/* ================================== */}
 
         <section id="energy">
+
           <div className="section-heading">
+
             <div>
               <h2>Electrical Monitoring</h2>
 
@@ -643,10 +871,14 @@ export default function App() {
               </p>
             </div>
 
-            <span className="section-label">PZEM-004T</span>
+            <span className="section-label">
+              PZEM-004T
+            </span>
+
           </div>
 
           <div className="sensor-grid four-columns">
+
             <SensorCard
               title="Voltage"
               value={formatValue(latest?.voltage)}
@@ -683,33 +915,65 @@ export default function App() {
               color="orange"
               subtitle="Accumulated energy"
             />
+
           </div>
+
+          <div className="sensor-grid">
+
+            <SensorCard
+              title="Frequency"
+              value={formatValue(latest?.frequency, 2)}
+              unit="Hz"
+              icon={Activity}
+              color="cyan"
+              subtitle="Supply frequency"
+            />
+
+            <SensorCard
+              title="Power Factor"
+              value={formatValue(latest?.power_factor, 2)}
+              unit=""
+              icon={Gauge}
+              color="blue"
+              subtitle="Electrical power factor"
+            />
+
+          </div>
+
         </section>
 
-        {/* -------------------------------- */}
+
+        {/* ================================== */}
         {/* SECURITY & ALARM MONITORING */}
-        {/* -------------------------------- */}
+        {/* ================================== */}
 
         <section id="security">
+
           <div className="section-heading">
+
             <div>
               <h2>Security & Alarm Monitoring</h2>
-
               <p>mmWave presence and alarm states</p>
             </div>
 
-            <span className="section-label">SAFETY</span>
+            <span className="section-label">
+              SAFETY
+            </span>
+
           </div>
 
           <div className="security-grid">
 
             {/* HUMAN PRESENCE */}
+
             <div className="security-card">
+
               <div className="security-icon cyan">
                 <Users size={23} />
               </div>
 
               <div>
+
                 <p>Human Presence</p>
 
                 <h3>
@@ -721,6 +985,7 @@ export default function App() {
                 </h3>
 
                 <span>mmWave sensor</span>
+
               </div>
 
               <span
@@ -732,105 +997,152 @@ export default function App() {
                       : "danger"
                 }`}
               >
+
                 {personStatusUnknown
                   ? "NO DATA"
                   : personDetected
                     ? "PRESENT"
                     : "ABSENT"}
+
               </span>
+
             </div>
 
+
             {/* TEMPERATURE WARNING */}
+
             <div className="security-card">
+
               <div
                 className={`security-icon ${
-                  temperatureWarning ? "red-icon" : "green"
+                  temperatureWarning
+                    ? "red-icon"
+                    : "green"
                 }`}
               >
+
                 {temperatureWarning
                   ? <ShieldAlert size={23} />
                   : <ShieldCheck size={23} />}
+
               </div>
 
               <div>
+
                 <p>Temperature Warning</p>
 
                 <h3>
-                  {temperatureWarning ? "ALERT" : "NORMAL"}
+                  {temperatureWarning
+                    ? "ALERT"
+                    : "NORMAL"}
                 </h3>
 
                 <span>Threshold: 45°C</span>
+
               </div>
 
               <span
                 className={`status-pill ${
-                  temperatureWarning ? "danger" : "normal"
+                  temperatureWarning
+                    ? "danger"
+                    : "normal"
                 }`}
               >
-                {temperatureWarning ? "WARNING" : "SAFE"}
+
+                {temperatureWarning
+                  ? "WARNING"
+                  : "SAFE"}
+
               </span>
+
             </div>
 
+
             {/* BUZZER */}
+
             <div className="security-card">
+
               <div
                 className={`security-icon ${
-                  buzzerOn ? "red-icon" : "green"
+                  buzzerOn
+                    ? "red-icon"
+                    : "green"
                 }`}
               >
                 <Volume2 size={23} />
               </div>
 
               <div>
+
                 <p>Buzzer Status</p>
 
-                <h3>{buzzerOn ? "ACTIVE" : "OFF"}</h3>
+                <h3>
+                  {buzzerOn ? "ACTIVE" : "OFF"}
+                </h3>
 
                 <span>Alarm output</span>
+
               </div>
 
               <span
                 className={`status-pill ${
-                  buzzerOn ? "danger" : "normal"
+                  buzzerOn
+                    ? "danger"
+                    : "normal"
                 }`}
               >
+
                 {buzzerOn ? "ON" : "OFF"}
+
               </span>
+
             </div>
+
           </div>
+
         </section>
 
-        {/* -------------------------------- */}
+
+        {/* ================================== */}
         {/* SENSOR HISTORY */}
-        {/* -------------------------------- */}
+        {/* ================================== */}
 
         <section>
+
           <div className="section-heading">
+
             <div>
               <h2>Sensor History</h2>
-
               <p>Last 30 available database records</p>
             </div>
 
-            <span className="section-label">HISTORY</span>
+            <span className="section-label">
+              HISTORY
+            </span>
+
           </div>
 
           <div className="charts-grid">
 
             {/* TEMPERATURE CHART */}
+
             <div className="chart-card">
+
               <div className="chart-heading">
+
                 <div>
                   <h3>Temperature Trend</h3>
-
                   <p>Historical temperature readings</p>
                 </div>
 
                 <Thermometer size={20} />
+
               </div>
 
               <ResponsiveContainer width="100%" height={250}>
+
                 <LineChart data={history}>
+
                   <CartesianGrid
                     stroke="#263548"
                     strokeDasharray="4 4"
@@ -865,24 +1177,33 @@ export default function App() {
                     dot={false}
                     connectNulls={false}
                   />
+
                 </LineChart>
+
               </ResponsiveContainer>
+
             </div>
 
+
             {/* POWER CHART */}
+
             <div className="chart-card">
+
               <div className="chart-heading">
+
                 <div>
                   <h3>Power Trend</h3>
-
                   <p>Historical active power readings</p>
                 </div>
 
                 <Zap size={20} />
+
               </div>
 
               <ResponsiveContainer width="100%" height={250}>
+
                 <LineChart data={history}>
+
                   <CartesianGrid
                     stroke="#263548"
                     strokeDasharray="4 4"
@@ -916,25 +1237,37 @@ export default function App() {
                     dot={false}
                     connectNulls={false}
                   />
+
                 </LineChart>
+
               </ResponsiveContainer>
+
             </div>
 
+
             {/* MQ-2 GAS CHART */}
+
             <div className="chart-card">
+
               <div className="chart-heading">
+
                 <div>
                   <h3>MQ-2 Gas Sensor Trend</h3>
-
                   <p>Historical raw ADC readings</p>
                 </div>
 
                 <Flame size={20} />
+
               </div>
 
-              {history.some((record) => record.mq2_adc !== null) ? (
+              {history.some(
+                (record) => record.mq2_adc !== null
+              ) ? (
+
                 <ResponsiveContainer width="100%" height={250}>
+
                   <LineChart data={history}>
+
                     <CartesianGrid
                       stroke="#263548"
                       strokeDasharray="4 4"
@@ -968,25 +1301,34 @@ export default function App() {
                       dot={false}
                       connectNulls={false}
                     />
+
                   </LineChart>
+
                 </ResponsiveContainer>
+
               ) : (
+
                 <div className="loading-message">
                   <Flame size={18} />
-                  Waiting for actual MQ-2 readings. The chart will appear
-                  when sensor data is received.
+                  Waiting for actual MQ-2 readings.
+                  The chart will appear when sensor data is received.
                 </div>
+
               )}
+
             </div>
 
           </div>
+
         </section>
 
-        {/* -------------------------------- */}
+
+        {/* ================================== */}
         {/* FOOTER */}
-        {/* -------------------------------- */}
+        {/* ================================== */}
 
         <footer className="dashboard-footer">
+
           <div>
             <Cpu size={16} />
             Smart Lab Monitor
@@ -996,25 +1338,32 @@ export default function App() {
             <Clock size={15} />
 
             Last updated:{" "}
+
             {lastUpdated
               ? lastUpdated.toLocaleTimeString()
               : "--"}
           </div>
 
           <div>
+
             <span
               className={`status-dot ${
-                backendOnline ? "green" : "red"
+                backendOnline
+                  ? "green"
+                  : "red"
               }`}
             />
 
             {hasRecord
               ? `Record #${latest.id}`
               : "No sensor records"}
+
           </div>
+
         </footer>
 
       </main>
+
     </div>
   );
 }

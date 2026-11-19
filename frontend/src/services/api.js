@@ -1,23 +1,23 @@
 
-const API_BASE_URL = "/api";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://smart-lab-monitor-api.onrender.com";
 
-// Fetch sensor history from Flask
 export async function getSensorHistory() {
-  const response = await fetch(`${API_BASE_URL}/sensor`);
+  const response = await fetch(`${API_BASE_URL}/api/sensor`);
 
   if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
+    throw new Error(`Sensor API error: ${response.status}`);
   }
 
   return response.json();
 }
 
-// Fetch backend health
 export async function getBackendHealth() {
-  const response = await fetch(`${API_BASE_URL}/health`);
+  const response = await fetch(`${API_BASE_URL}/api/health`);
 
   if (!response.ok) {
-    throw new Error("Backend is unavailable");
+    throw new Error(`Backend health error: ${response.status}`);
   }
 
   return response.json();
